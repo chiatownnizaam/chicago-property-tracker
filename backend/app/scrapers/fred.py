@@ -1,28 +1,15 @@
 """
 FRED (Federal Reserve Economic Data) integration.
 
-Pulls free, public time-series for macro mortgage/foreclosure indicators.
-National data is the most reliable; some series are available at state level
-but the mortgage-quality ones (delinquency, foreclosure rate) generally
-aren't.
-
-Series picked to map onto the user-requested metrics:
-
-  Delinquency / Foreclosure indicators
-    DRSFRMACBS    Delinquency Rate on Single-Family Residential Mortgages,
-                  All Commercial Banks (quarterly, %)
-    DRBLACBS      Delinquency Rate on All Loans, All Commercial Banks (quarterly, %)
-    CORSFRMACBS   Charge-Off Rate on Single-Family Residential Mortgages,
-                  All Commercial Banks (quarterly, %)
-
-  Macro / Housing market context
-    MORTGAGE30US  30-Year Fixed Rate Mortgage Average in the United States
-                  (weekly, %)
-    ETOTALUSQ176N E&E REO ratio proxy: total bank-owned real estate
-                  (quarterly) — used as REO inventory proxy
+Pulls free, public time-series for macro mortgage/foreclosure/housing
+indicators. National data is the most reliable; some series are available
+at state/MSA level (Chicago MSA, Illinois state).
 
 Each observation lands in `market_metrics` table, keyed by
 (source, series_id, geography, as_of_date) so re-runs are idempotent.
+
+To add a series: find its ID at https://fred.stlouisfed.org and append
+to the SERIES dict below. The scraper handles any FRED series.
 """
 import logging
 from datetime import date, datetime
@@ -36,38 +23,115 @@ from app.config import settings
 from app.database import SessionLocal
 from app.models.market_metric import MarketMetric
 from app.utils.http import get_json
-from app.utils.normalize import to_decimal
 
 log = logging.getLogger(__name__)
 
 FRED_BASE = "https://api.stlouisfed.org/fred"
 
-# Curated series — friendly name + unit + frequency hint.
-# Add more by editing this dict; the scraper handles any FRED series id.
+# Categories (for grouping in UI):
+#   credit       — delinquency, charge-off, foreclosure-related rates
+#   prices       — home price indices, median sale prices
+#   inventory    — housing supply, active listings, months of inventory
+#   rates        — mortgage rates, fed funds, treasury yields
+#   economy      — broader economic indicators correlated with housing distress
+#
+# Geography:
+#   national     — US-wide
+#   illinois     — IL state-level
+#   chicago_msa  — Chicago-Naperville-Elgin MSA
 SERIES: Dict[str, Dict[str, str]] = {
+    # ---- Credit / delinquency -------------------------------------------------
     "DRSFRMACBS": {
         "name": "Delinquency Rate, Single-Family Residential Mortgages",
-        "unit": "percent",
-        "frequency": "quarterly",
-        "metric_tag": "delinquency_rate",
+        "unit": "percent", "frequency": "quarterly",
+        "category": "credit", "geography": "national",
     },
     "DRBLACBS": {
-        "name": "Delinquency Rate, All Loans, Commercial Banks",
-        "unit": "percent",
-        "frequency": "quarterly",
-        "metric_tag": "delinquency_rate_total",
+        "name": "Delinquency Rate, All Loans",
+        "unit": "percent", "frequency": "quarterly",
+        "category": "credit", "geography": "national",
     },
     "CORSFRMACBS": {
         "name": "Charge-Off Rate, Single-Family Residential Mortgages",
-        "unit": "percent",
-        "frequency": "quarterly",
-        "metric_tag": "chargeoff_rate",
+        "unit": "percent", "frequency": "quarterly",
+        "category": "credit", "geography": "national",
     },
+
+    # ---- Home prices ---------------------------------------------------------
+    "CSUSHPISA": {
+        "name": "Case-Shiller US National Home Price Index (SA)",
+        "unit": "index", "frequency": "monthly",
+        "category": "prices", "geography": "national",
+    },
+    "CHXRSA": {
+        "name": "Case-Shiller Chicago Home Price Index (SA)",
+        "unit": "index", "frequency": "monthly",
+        "category": "prices", "geography": "chicago_msa",
+    },
+    "ATNHPIUS16974Q": {
+        "name": "FHFA Chicago-Naperville-Elgin MSA Home Price Index",
+        "unit": "index", "frequency": "quarterly",
+        "category": "prices", "geography": "chicago_msa",
+    },
+    "ILSTHPI": {
+        "name": "FHFA All-Transactions House Price Index for Illinois",
+        "unit": "index", "frequency": "quarterly",
+        "category": "prices", "geography": "illinois",
+    },
+    "MSPUS": {
+        "name": "Median Sales Price of Houses Sold",
+        "unit": "usd", "frequency": "quarterly",
+        "category": "prices", "geography": "national",
+    },
+
+    # ---- Inventory / supply --------------------------------------------------
+    "MSACSR": {
+        "name": "Monthly Supply of New Houses (months of inventory)",
+        "unit": "months", "frequency": "monthly",
+        "category": "inventory", "geography": "national",
+    },
+    "HOSINVUSM495N": {
+        "name": "Active Listing Count (US)",
+        "unit": "count", "frequency": "monthly",
+        "category": "inventory", "geography": "national",
+    },
+    # ---- Rates ---------------------------------------------------------------
     "MORTGAGE30US": {
         "name": "30-Year Fixed Rate Mortgage Average",
-        "unit": "percent",
-        "frequency": "weekly",
-        "metric_tag": "mortgage_30y_rate",
+        "unit": "percent", "frequency": "weekly",
+        "category": "rates", "geography": "national",
+    },
+    "MORTGAGE15US": {
+        "name": "15-Year Fixed Rate Mortgage Average",
+        "unit": "percent", "frequency": "weekly",
+        "category": "rates", "geography": "national",
+    },
+    "FEDFUNDS": {
+        "name": "Federal Funds Effective Rate",
+        "unit": "percent", "frequency": "monthly",
+        "category": "rates", "geography": "national",
+    },
+    "DGS10": {
+        "name": "10-Year Treasury Constant Maturity Rate",
+        "unit": "percent", "frequency": "daily",
+        "category": "rates", "geography": "national",
+    },
+
+    # ---- Broader economy -----------------------------------------------------
+    "UNRATE": {
+        "name": "US Unemployment Rate",
+        "unit": "percent", "frequency": "monthly",
+        "category": "economy", "geography": "national",
+    },
+    "ILUR": {
+        "name": "Illinois Unemployment Rate",
+        "unit": "percent", "frequency": "monthly",
+        "category": "economy", "geography": "illinois",
+    },
+    "CHIC917URN": {
+        "name": "Chicago-Naperville-Elgin MSA Unemployment Rate",
+        "unit": "percent", "frequency": "monthly",
+        "category": "economy", "geography": "chicago_msa",
     },
 }
 
@@ -105,6 +169,7 @@ def ingest_series(db: Session, series_id: str) -> int:
     name = cfg.get("name", series_id)
     unit = cfg.get("unit", "percent")
     freq = cfg.get("frequency")
+    geography = cfg.get("geography", "national")
 
     try:
         observations = fetch_observations(series_id)
@@ -119,7 +184,6 @@ def ingest_series(db: Session, series_id: str) -> int:
     for obs in observations:
         date_str = obs.get("date")
         raw_value = obs.get("value")
-        # FRED uses "." to indicate missing values
         if not date_str or raw_value in (None, ".", ""):
             continue
         try:
@@ -132,7 +196,7 @@ def ingest_series(db: Session, series_id: str) -> int:
                 existing = db.query(MarketMetric).filter(
                     MarketMetric.source == "fred",
                     MarketMetric.series_id == series_id,
-                    MarketMetric.geography == "national",
+                    MarketMetric.geography == geography,
                     MarketMetric.as_of_date == date_str,
                 ).first()
 
@@ -145,19 +209,22 @@ def ingest_series(db: Session, series_id: str) -> int:
                         source="fred",
                         series_id=series_id,
                         series_name=name,
-                        geography="national",
+                        geography=geography,
                         as_of_date=date_str,
                         value=value,
                         unit=unit,
                         frequency=freq,
-                        series_metadata={"fred_series_id": series_id},
+                        series_metadata={
+                            "fred_series_id": series_id,
+                            "category": cfg.get("category"),
+                        },
                     ))
                     count += 1
         except IntegrityError:
             continue
 
     db.commit()
-    log.info(f"FRED {series_id}: ingested {count} new observations")
+    log.info(f"FRED {series_id}: ingested {count} new observations ({geography})")
     return count
 
 
