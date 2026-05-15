@@ -18,7 +18,9 @@ class MarketMetric(Base):
     geography = Column(String(50), nullable=False, default="national")  # national, illinois, tracked
 
     as_of_date = Column(Date, nullable=False, index=True)
-    value = Column(Numeric(14, 6), nullable=False)
+    # 20 total digits, 6 after decimal — fits multi-trillion-$ values
+    # (e.g. total bank assets in thousands).
+    value = Column(Numeric(20, 6), nullable=False)
     unit = Column(String(20), default="percent")                    # percent | count | ratio | usd
     frequency = Column(String(20))                                  # daily | weekly | monthly | quarterly | annual
 

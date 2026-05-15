@@ -15,6 +15,7 @@ from app.database import get_db
 from app.models.market_metric import MarketMetric
 from app.scrapers.fred import SERIES, run_fred_ingest, FREDNotConfigured
 from app.scrapers.chicago_distress import run_chicago_distress_ingest
+from app.scrapers.ffiec import run_ffiec_ingest
 from app.services.market_metrics import compute_tracked_metrics
 
 log = logging.getLogger(__name__)
@@ -79,6 +80,30 @@ def get_market_metrics(db: Session = Depends(get_db)):
             "category": (r.series_metadata or {}).get("category", "distress"),
         })
 
+    # FFIEC Call Report series — derived metrics aggregated from IL banks
+    ffiec_rows = (
+        db.query(MarketMetric)
+        .filter(MarketMetric.source == "ffiec")
+        .order_by(desc(MarketMetric.as_of_date))
+        .all()
+    )
+    seen_ffiec = set()
+    ffiec_latest = []
+    for r in ffiec_rows:
+        if r.series_id in seen_ffiec:
+            continue
+        seen_ffiec.add(r.series_id)
+        ffiec_latest.append({
+            "series_id": r.series_id,
+            "name": r.series_name,
+            "geography": r.geography,
+            "as_of": r.as_of_date.isoformat(),
+            "value": float(r.value),
+            "unit": r.unit,
+            "frequency": r.frequency,
+            "category": "credit",
+        })
+
     local = compute_tracked_metrics(db)
 
     return {
@@ -90,6 +115,11 @@ def get_market_metrics(db: Session = Depends(get_db)):
             "source": "Chicago Data Portal",
             "note": "Chicago city only — Skokie, Lincolnwood, Evanston are separate municipalities not in this data.",
             "series": chicago_latest,
+        },
+        "ffiec": {
+            "source": "FFIEC Call Reports (via FDIC BankFind API)",
+            "note": "Quarterly aggregates across all FDIC-insured Illinois banks.",
+            "series": ffiec_latest,
         },
         "tracked": local,
     }
@@ -147,3 +177,35 @@ def refresh_chicago(background_tasks: BackgroundTasks):
     """Refresh Chicago Data Portal aggregates (permits, vacant buildings, crime)."""
     background_tasks.add_task(run_chicago_distress_ingest)
     return {"status": "ingest_started"}
+
+
+@router.post("/refresh-ffiec")
+def refresh_ffiec(background_tasks: BackgroundTasks):
+    """Refresh FFIEC Call Report aggregates (Illinois bank OREO % of assets)."""
+    background_tasks.add_task(run_ffiec_ingest)
+    return {"status": "ingest_started"}
+
+
+@router.get("/series/{source}/{series_id}")
+def get_series_history(source: str, series_id: str, db: Session = Depends(get_db)):
+    """Generic time-series fetch — works for fred / chicago_portal / ffiec."""
+    rows = (
+        db.query(MarketMetric)
+        .filter(MarketMetric.source == source, MarketMetric.series_id == series_id)
+        .order_by(MarketMetric.as_of_date)
+        .all()
+    )
+    if not rows:
+        raise HTTPException(404, f"No data for {source}/{series_id}")
+    return {
+        "source": source,
+        "series_id": series_id,
+        "name": rows[0].series_name,
+        "unit": rows[0].unit,
+        "frequency": rows[0].frequency,
+        "geography": rows[0].geography,
+        "observations": [
+            {"date": r.as_of_date.isoformat(), "value": float(r.value)}
+            for r in rows
+        ],
+    }

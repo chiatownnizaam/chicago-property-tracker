@@ -52,6 +52,14 @@ def _run_chicago_distress_ingest():
         log.exception(f"Chicago distress ingest failed: {e}")
 
 
+def _run_ffiec_ingest():
+    from app.scrapers.ffiec import run_ffiec_ingest
+    try:
+        run_ffiec_ingest()
+    except Exception as e:
+        log.exception(f"FFIEC ingest failed: {e}")
+
+
 def start_scheduler() -> BackgroundScheduler:
     global _scheduler
     if _scheduler is not None:
@@ -95,6 +103,16 @@ def start_scheduler() -> BackgroundScheduler:
         trigger=CronTrigger(hour=2, minute=30),
         id="chicago_distress_daily",
         name="Chicago Data Portal aggregates (daily)",
+        replace_existing=True,
+    )
+
+    # FFIEC Call Reports update quarterly (~6 weeks after quarter-end);
+    # monthly check on the 5th catches the lag.
+    scheduler.add_job(
+        _run_ffiec_ingest,
+        trigger=CronTrigger(day=5, hour=4, minute=0),
+        id="ffiec_monthly",
+        name="FFIEC Call Reports (monthly check)",
         replace_existing=True,
     )
 

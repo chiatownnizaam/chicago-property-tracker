@@ -44,6 +44,13 @@ function fmt(v, unit) {
   const n = Number(v);
   if (unit === "percent") return `${n.toFixed(2)}%`;
   if (unit === "usd") return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+  if (unit === "usd_thousands") {
+    if (n >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(2)}T`;
+    if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(2)}B`;
+    if (n >= 1_000) return `$${(n / 1_000).toFixed(2)}M`;
+    return `$${n.toLocaleString()}k`;
+  }
+  if (unit === "usd_billions") return `$${n.toLocaleString(undefined, { maximumFractionDigits: 0 })}B`;
   if (unit === "count") return n.toLocaleString();
   if (unit === "months") return `${n.toFixed(1)} mo`;
   if (unit === "index") return n.toFixed(1);
@@ -142,6 +149,18 @@ export default function MarketMetricsPage() {
       grouped[cat].push({
         ...series,
         geography: series.geography || "chicago",
+      });
+    }
+  }
+
+  // FFIEC series (IL bank aggregates) go under credit
+  if (data.ffiec) {
+    for (const series of data.ffiec.series) {
+      const cat = series.category || "credit";
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push({
+        ...series,
+        geography: series.geography || "illinois",
       });
     }
   }
