@@ -8,11 +8,12 @@ POST /market-metrics/refresh-fred   — admin trigger to pull fresh FRED data
 """
 import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.market_metric import MarketMetric
+from app.models.bank_financial import BankFinancial
 from app.scrapers.fred import SERIES, run_fred_ingest, FREDNotConfigured
 from app.scrapers.chicago_distress import run_chicago_distress_ingest
 from app.scrapers.ffiec import run_ffiec_ingest
@@ -181,9 +182,79 @@ def refresh_chicago(background_tasks: BackgroundTasks):
 
 @router.post("/refresh-ffiec")
 def refresh_ffiec(background_tasks: BackgroundTasks):
-    """Refresh FFIEC Call Report aggregates (Illinois bank OREO % of assets)."""
+    """Refresh FFIEC Call Report aggregates + per-bank Cook County drill-down."""
     background_tasks.add_task(run_ffiec_ingest)
     return {"status": "ingest_started"}
+
+
+@router.get("/cook-county-banks")
+def cook_county_banks(db: Session = Depends(get_db)):
+    """
+    Per-bank latest-quarter snapshot for Cook County, IL banks.
+    Sorted by OREO% descending so most-stressed banks float to the top.
+    """
+    # Latest as_of_date per bank
+    latest_date_subq = (
+        db.query(
+            BankFinancial.fdic_id,
+            func.max(BankFinancial.as_of_date).label("latest"),
+        )
+        .filter(BankFinancial.county == "Cook")
+        .group_by(BankFinancial.fdic_id)
+        .subquery()
+    )
+    rows = (
+        db.query(BankFinancial)
+        .join(latest_date_subq,
+              (BankFinancial.fdic_id == latest_date_subq.c.fdic_id) &
+              (BankFinancial.as_of_date == latest_date_subq.c.latest))
+        .order_by(BankFinancial.oreo_pct_assets.desc().nullslast())
+        .all()
+    )
+    return {
+        "as_of": rows[0].as_of_date.isoformat() if rows else None,
+        "banks": [
+            {
+                "fdic_id": r.fdic_id,
+                "name": r.name,
+                "city": r.city,
+                "county": r.county,
+                "state": r.state,
+                "as_of_date": r.as_of_date.isoformat(),
+                "total_assets_thousands": float(r.total_assets),
+                "oreo_thousands": float(r.oreo),
+                "oreo_pct_assets": float(r.oreo_pct_assets) if r.oreo_pct_assets else 0,
+            }
+            for r in rows
+        ],
+    }
+
+
+@router.get("/cook-county-banks/{fdic_id}")
+def cook_county_bank_history(fdic_id: str, db: Session = Depends(get_db)):
+    """Quarterly history for a single bank."""
+    rows = (
+        db.query(BankFinancial)
+        .filter(BankFinancial.fdic_id == fdic_id)
+        .order_by(BankFinancial.as_of_date)
+        .all()
+    )
+    if not rows:
+        raise HTTPException(404, "Bank not found")
+    return {
+        "fdic_id": fdic_id,
+        "name": rows[-1].name,
+        "city": rows[-1].city,
+        "history": [
+            {
+                "as_of": r.as_of_date.isoformat(),
+                "total_assets_thousands": float(r.total_assets),
+                "oreo_thousands": float(r.oreo),
+                "oreo_pct_assets": float(r.oreo_pct_assets) if r.oreo_pct_assets else 0,
+            }
+            for r in rows
+        ],
+    }
 
 
 @router.get("/series/{source}/{series_id}")

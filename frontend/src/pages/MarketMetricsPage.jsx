@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { getMarketMetrics, getFredSeries, refreshFred } from "../services/api";
+import { getMarketMetrics, getFredSeries, refreshFred, getCookCountyBanks, getBankHistory } from "../services/api";
 
 const CATEGORY_ORDER = ["credit", "prices", "inventory", "rates", "economy", "distress", "safety"];
 const CATEGORY_LABELS = {
@@ -64,6 +64,8 @@ export default function MarketMetricsPage() {
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [expandedSeries, setExpandedSeries] = useState(new Set());
+  const [banks, setBanks] = useState(null);
+  const [bankHistory, setBankHistory] = useState({});
 
   useEffect(() => {
     loadAll();
@@ -71,17 +73,27 @@ export default function MarketMetricsPage() {
 
   async function loadAll() {
     try {
-      const [summary, meta] = await Promise.all([
+      const [summary, meta, bankData] = await Promise.all([
         getMarketMetrics(),
         fetch("/api/v1/market-metrics/fred-series", {
           headers: { Authorization: `Bearer ${localStorage.getItem("cpt_token")}` },
         }).then((r) => r.json()),
+        getCookCountyBanks().catch(() => null),
       ]);
       setData(summary);
       setSeriesMeta(meta);
+      setBanks(bankData);
     } catch (e) {
       setError(e.response?.data?.detail || e.message);
     }
+  }
+
+  async function loadBankHistory(fdic_id) {
+    if (bankHistory[fdic_id]) return;
+    try {
+      const d = await getBankHistory(fdic_id);
+      setBankHistory((prev) => ({ ...prev, [fdic_id]: d }));
+    } catch {}
   }
 
   async function loadChart(seriesId) {
@@ -392,8 +404,100 @@ export default function MarketMetricsPage() {
         )}
       </section>
 
+      {/* Cook County per-bank drill-down */}
+      {banks && banks.banks && banks.banks.length > 0 && (
+        <section>
+          <h3 className="font-semibold text-gray-800 mb-1">Cook County banks — per-bank Call Reports</h3>
+          <p className="text-xs text-gray-500 mb-3 italic">
+            All FDIC-insured banks headquartered in Cook County, IL, sorted by OREO % of assets.
+            Source: FDIC BankFind. As of {banks.as_of}.
+          </p>
+          <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+            <table className="min-w-full bg-white text-sm">
+              <thead>
+                <tr className="bg-gray-50 border-b border-gray-200">
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600 uppercase">Bank</th>
+                  <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600 uppercase">City</th>
+                  <th className="text-right px-4 py-2 text-xs font-semibold text-gray-600 uppercase">Total Assets</th>
+                  <th className="text-right px-4 py-2 text-xs font-semibold text-gray-600 uppercase">OREO</th>
+                  <th className="text-right px-4 py-2 text-xs font-semibold text-gray-600 uppercase">OREO %</th>
+                  <th className="px-4 py-2 text-xs font-semibold text-gray-600 uppercase">10y trend</th>
+                </tr>
+              </thead>
+              <tbody>
+                {banks.banks.map((b) => (
+                  <BankRow
+                    key={b.fdic_id}
+                    bank={b}
+                    history={bankHistory[b.fdic_id]}
+                    onExpand={() => loadBankHistory(b.fdic_id)}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       <p className="text-xs text-gray-400 text-center">Reported as of {t.as_of}</p>
     </div>
+  );
+}
+
+function BankRow({ bank, history, onExpand }) {
+  const [open, setOpen] = useState(false);
+  const fmtUsd = (n) => {
+    if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}T`;
+    if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}B`;
+    if (n >= 1e3) return `$${(n / 1e3).toFixed(1)}M`;
+    return `$${Math.round(n).toLocaleString()}k`;
+  };
+  return (
+    <>
+      <tr
+        className="border-b border-gray-100 hover:bg-gray-50 cursor-pointer"
+        onClick={() => { setOpen(!open); onExpand(); }}
+      >
+        <td className="px-4 py-2 font-medium text-blue-700">
+          {open ? "▼" : "▶"} {bank.name}
+        </td>
+        <td className="px-4 py-2 text-gray-600">{bank.city}</td>
+        <td className="px-4 py-2 text-right">{fmtUsd(bank.total_assets_thousands)}</td>
+        <td className="px-4 py-2 text-right">{fmtUsd(bank.oreo_thousands)}</td>
+        <td className={`px-4 py-2 text-right font-mono ${bank.oreo_pct_assets > 0.5 ? "text-red-600 font-semibold" : bank.oreo_pct_assets > 0.1 ? "text-orange-600" : "text-gray-700"}`}>
+          {bank.oreo_pct_assets.toFixed(4)}%
+        </td>
+        <td className="px-4 py-2">
+          {history ? <BankSpark history={history.history} /> : <span className="text-xs text-gray-400">click to load</span>}
+        </td>
+      </tr>
+      {open && history && (
+        <tr>
+          <td colSpan={6} className="px-4 py-3 bg-gray-50 border-b border-gray-100">
+            <ResponsiveContainer width="100%" height={180}>
+              <LineChart data={history.history}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="as_of" tick={{ fontSize: 10 }} />
+                <YAxis tick={{ fontSize: 10 }} tickFormatter={(v) => `${v.toFixed(2)}%`} />
+                <Tooltip formatter={(v) => `${Number(v).toFixed(4)}%`} />
+                <Line type="monotone" dataKey="oreo_pct_assets" stroke="#dc2626" strokeWidth={2} dot={{ r: 3 }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function BankSpark({ history }) {
+  if (!history || history.length === 0) return <span className="text-xs text-gray-400">—</span>;
+  return (
+    <ResponsiveContainer width={100} height={28}>
+      <LineChart data={history}>
+        <Line type="monotone" dataKey="oreo_pct_assets" stroke="#dc2626" strokeWidth={1.5} dot={false} />
+      </LineChart>
+    </ResponsiveContainer>
   );
 }
 

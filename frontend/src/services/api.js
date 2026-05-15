@@ -41,3 +41,12 @@ export const getFredSeries = (id) =>
 
 export const refreshFred = () =>
   api.post("/market-metrics/refresh-fred").then((r) => r.data);
+
+export const getCookCountyBanks = () =>
+  api.get("/market-metrics/cook-county-banks").then((r) => r.data);
+
+export const getBankHistory = (fdic_id) =>
+  api.get(`/market-metrics/cook-county-banks/${fdic_id}`).then((r) => r.data);
+
+export const getSeriesHistory = (source, series_id) =>
+  api.get(`/market-metrics/series/${source}/${series_id}`).then((r) => r.data);

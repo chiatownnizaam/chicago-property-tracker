@@ -6,5 +6,6 @@ from app.models.bank_seizure import BankSeizure
 from app.models.listing import Listing, PriceHistory
 from app.models.user import User
 from app.models.market_metric import MarketMetric
+from app.models.bank_financial import BankFinancial
 
-__all__ = ["Property", "Sale", "Foreclosure", "Eviction", "BankSeizure", "Listing", "PriceHistory", "User", "MarketMetric"]
+__all__ = ["Property", "Sale", "Foreclosure", "Eviction", "BankSeizure", "Listing", "PriceHistory", "User", "MarketMetric", "BankFinancial"]
