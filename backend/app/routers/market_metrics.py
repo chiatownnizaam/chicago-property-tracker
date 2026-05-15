@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.market_metric import MarketMetric
 from app.scrapers.fred import SERIES, run_fred_ingest, FREDNotConfigured
+from app.scrapers.chicago_distress import run_chicago_distress_ingest
 from app.services.market_metrics import compute_tracked_metrics
 
 log = logging.getLogger(__name__)
@@ -54,12 +55,41 @@ def get_market_metrics(db: Session = Depends(get_db)):
                 "note": "Run /market-metrics/refresh-fred to populate.",
             })
 
+    # Chicago Data Portal series — one row per metric (latest only)
+    chicago_rows = (
+        db.query(MarketMetric)
+        .filter(MarketMetric.source == "chicago_portal")
+        .order_by(desc(MarketMetric.as_of_date))
+        .all()
+    )
+    seen_chi_series = set()
+    chicago_latest = []
+    for r in chicago_rows:
+        if r.series_id in seen_chi_series:
+            continue
+        seen_chi_series.add(r.series_id)
+        chicago_latest.append({
+            "series_id": r.series_id,
+            "name": r.series_name,
+            "geography": r.geography,
+            "as_of": r.as_of_date.isoformat(),
+            "value": float(r.value),
+            "unit": r.unit,
+            "frequency": r.frequency,
+            "category": (r.series_metadata or {}).get("category", "distress"),
+        })
+
     local = compute_tracked_metrics(db)
 
     return {
         "macro": {
             "source": "FRED (Federal Reserve Economic Data)",
             "series": fred_latest,
+        },
+        "chicago": {
+            "source": "Chicago Data Portal",
+            "note": "Chicago city only — Skokie, Lincolnwood, Evanston are separate municipalities not in this data.",
+            "series": chicago_latest,
         },
         "tracked": local,
     }
@@ -104,10 +134,16 @@ def get_fred_series(series_id: str, db: Session = Depends(get_db)):
 def refresh_fred(background_tasks: BackgroundTasks):
     """Kicks off a FRED ingest in the background and returns immediately."""
     try:
-        # Light validation that the key is configured
         from app.scrapers.fred import _ensure_key
         _ensure_key()
     except FREDNotConfigured as e:
         raise HTTPException(status_code=400, detail=str(e))
     background_tasks.add_task(run_fred_ingest)
     return {"status": "ingest_started", "series": list(SERIES.keys())}
+
+
+@router.post("/refresh-chicago")
+def refresh_chicago(background_tasks: BackgroundTasks):
+    """Refresh Chicago Data Portal aggregates (permits, vacant buildings, crime)."""
+    background_tasks.add_task(run_chicago_distress_ingest)
+    return {"status": "ingest_started"}

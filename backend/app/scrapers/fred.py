@@ -95,6 +95,31 @@ SERIES: Dict[str, Dict[str, str]] = {
         "unit": "count", "frequency": "monthly",
         "category": "inventory", "geography": "national",
     },
+    "HOUST": {
+        "name": "Housing Starts (Total, Privately-Owned)",
+        "unit": "count", "frequency": "monthly",
+        "category": "inventory", "geography": "national",
+    },
+    "PERMIT": {
+        "name": "Building Permits (New Private Housing Units Authorized)",
+        "unit": "count", "frequency": "monthly",
+        "category": "inventory", "geography": "national",
+    },
+    "ILBP1FH": {
+        "name": "Illinois Single-Family Building Permits",
+        "unit": "count", "frequency": "monthly",
+        "category": "inventory", "geography": "illinois",
+    },
+    "RHVRUSQ156N": {
+        "name": "Rental Vacancy Rate (US)",
+        "unit": "percent", "frequency": "quarterly",
+        "category": "inventory", "geography": "national",
+    },
+    "RHORUSQ156N": {
+        "name": "Homeownership Rate (US)",
+        "unit": "percent", "frequency": "quarterly",
+        "category": "inventory", "geography": "national",
+    },
     # ---- Rates ---------------------------------------------------------------
     "MORTGAGE30US": {
         "name": "30-Year Fixed Rate Mortgage Average",
@@ -116,6 +141,21 @@ SERIES: Dict[str, Dict[str, str]] = {
         "unit": "percent", "frequency": "daily",
         "category": "rates", "geography": "national",
     },
+    "DGS2": {
+        "name": "2-Year Treasury Constant Maturity Rate",
+        "unit": "percent", "frequency": "daily",
+        "category": "rates", "geography": "national",
+    },
+    "DGS5": {
+        "name": "5-Year Treasury Constant Maturity Rate",
+        "unit": "percent", "frequency": "daily",
+        "category": "rates", "geography": "national",
+    },
+    "DGS30": {
+        "name": "30-Year Treasury Constant Maturity Rate",
+        "unit": "percent", "frequency": "daily",
+        "category": "rates", "geography": "national",
+    },
 
     # ---- Broader economy -----------------------------------------------------
     "UNRATE": {
@@ -132,6 +172,16 @@ SERIES: Dict[str, Dict[str, str]] = {
         "name": "Chicago-Naperville-Elgin MSA Unemployment Rate",
         "unit": "percent", "frequency": "monthly",
         "category": "economy", "geography": "chicago_msa",
+    },
+    "MEHOINUSA672N": {
+        "name": "Real Median Household Income (US)",
+        "unit": "usd", "frequency": "annual",
+        "category": "economy", "geography": "national",
+    },
+    "MEHOINUSILA672N": {
+        "name": "Real Median Household Income (Illinois)",
+        "unit": "usd", "frequency": "annual",
+        "category": "economy", "geography": "illinois",
     },
 }
 

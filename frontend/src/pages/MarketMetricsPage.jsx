@@ -2,13 +2,15 @@ import { useEffect, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { getMarketMetrics, getFredSeries, refreshFred } from "../services/api";
 
-const CATEGORY_ORDER = ["credit", "prices", "inventory", "rates", "economy"];
+const CATEGORY_ORDER = ["credit", "prices", "inventory", "rates", "economy", "distress", "safety"];
 const CATEGORY_LABELS = {
   credit: "Credit & Delinquency",
   prices: "Home Prices",
   inventory: "Housing Supply",
   rates: "Interest Rates",
   economy: "Economy",
+  distress: "Vacant Buildings",
+  safety: "Crime",
 };
 const CATEGORY_COLORS = {
   credit: "#ef4444",
@@ -16,16 +18,20 @@ const CATEGORY_COLORS = {
   inventory: "#8b5cf6",
   rates: "#10b981",
   economy: "#f59e0b",
+  distress: "#dc2626",
+  safety: "#7c2d12",
 };
 const GEO_LABELS = {
   national: "US",
   illinois: "IL",
   chicago_msa: "Chicago MSA",
+  chicago: "Chicago",
 };
 const GEO_COLORS = {
   national: "bg-gray-100 text-gray-700",
   illinois: "bg-blue-100 text-blue-700",
   chicago_msa: "bg-red-100 text-red-700",
+  chicago: "bg-orange-100 text-orange-700",
 };
 
 function categoryOf(seriesId, knownSeries) {
@@ -126,6 +132,18 @@ export default function MarketMetricsPage() {
       ...series,
       geography: seriesMeta.find((m) => m.series_id === series.series_id)?.geography || series.geography || "national",
     });
+  }
+
+  // Chicago portal series come pre-categorized
+  if (data.chicago) {
+    for (const series of data.chicago.series) {
+      const cat = series.category || "distress";
+      if (!grouped[cat]) grouped[cat] = [];
+      grouped[cat].push({
+        ...series,
+        geography: series.geography || "chicago",
+      });
+    }
   }
 
   return (
@@ -282,15 +300,19 @@ export default function MarketMetricsPage() {
 
       {/* Per-city breakdown */}
       <section>
-        <h3 className="font-semibold text-gray-800 mb-3">By city</h3>
+        <h3 className="font-semibold text-gray-800 mb-3">By city — counts + listing metrics</h3>
         <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
           <table className="min-w-full bg-white text-sm">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="text-left px-4 py-2 text-xs font-semibold text-gray-600 uppercase">City</th>
                 <th className="text-right px-4 py-2 text-xs font-semibold text-gray-600 uppercase">Properties</th>
-                <th className="text-right px-4 py-2 text-xs font-semibold text-gray-600 uppercase">Active foreclosures</th>
-                <th className="text-right px-4 py-2 text-xs font-semibold text-gray-600 uppercase">REO inventory</th>
+                <th className="text-right px-4 py-2 text-xs font-semibold text-gray-600 uppercase">Foreclosures</th>
+                <th className="text-right px-4 py-2 text-xs font-semibold text-gray-600 uppercase">REO</th>
+                <th className="text-right px-4 py-2 text-xs font-semibold text-gray-600 uppercase">Active listings</th>
+                <th className="text-right px-4 py-2 text-xs font-semibold text-gray-600 uppercase">Median list</th>
+                <th className="text-right px-4 py-2 text-xs font-semibold text-gray-600 uppercase">Avg DOM</th>
+                <th className="text-right px-4 py-2 text-xs font-semibold text-gray-600 uppercase">% with drops</th>
               </tr>
             </thead>
             <tbody>
@@ -300,11 +322,24 @@ export default function MarketMetricsPage() {
                   <td className="px-4 py-2 text-right">{m.tracked_properties.toLocaleString()}</td>
                   <td className="px-4 py-2 text-right text-red-700">{m.active_foreclosures}</td>
                   <td className="px-4 py-2 text-right text-purple-700">{m.reo_inventory}</td>
+                  <td className="px-4 py-2 text-right">{m.active_listings ?? "—"}</td>
+                  <td className="px-4 py-2 text-right">
+                    {m.median_list_price ? `$${Number(m.median_list_price).toLocaleString(undefined, { maximumFractionDigits: 0 })}` : "—"}
+                  </td>
+                  <td className="px-4 py-2 text-right">{m.avg_days_on_market ?? "—"}</td>
+                  <td className="px-4 py-2 text-right text-orange-700">
+                    {m.pct_listings_with_drops != null ? `${m.pct_listings_with_drops}%` : "—"}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+        {data.chicago && (
+          <p className="text-xs text-gray-400 mt-2 italic">
+            Vacant Buildings + Crime metrics above are for Chicago city only. {data.chicago.note}
+          </p>
+        )}
       </section>
 
       <p className="text-xs text-gray-400 text-center">Reported as of {t.as_of}</p>

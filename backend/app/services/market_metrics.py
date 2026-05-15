@@ -18,6 +18,7 @@ from app.constants import TRACKED_CITIES
 from app.models.property import Property
 from app.models.foreclosure import Foreclosure, ForeclosureStatus
 from app.models.bank_seizure import BankSeizure, SeizureType
+from app.models.listing import Listing, ListingStatus
 
 
 # Statuses representing an actively-in-progress foreclosure (not dismissed,
@@ -145,7 +146,7 @@ def compute_tracked_metrics(db: Session) -> Dict[str, object]:
         if (reo_inventory + reo_disposed_90d) > 0 else Decimal("0")
     )
 
-    # ---- Per-city breakdown (counts) ----------------------------------------
+    # ---- Per-city breakdown (counts + listing metrics) -----------------------
     by_city = {}
     for city in TRACKED_CITIES:
         city_props = (
@@ -168,10 +169,43 @@ def compute_tracked_metrics(db: Session) -> Dict[str, object]:
             .filter(BankSeizure.is_active.is_(True))
             .scalar() or 0
         )
+
+        # Listings metrics — only active listings counted
+        active_listings_q = (
+            db.query(Listing)
+            .join(Property, Listing.property_id == Property.id)
+            .filter(Property.city == city)
+            .filter(Listing.is_active.is_(True))
+        )
+        active_listings_count = active_listings_q.count()
+
+        median_list_price = None
+        avg_days_on_market = None
+        listings_with_drops = 0
+        pct_with_drops = 0.0
+        if active_listings_count > 0:
+            prices = sorted([float(l.current_price) for l in active_listings_q.all() if l.current_price])
+            if prices:
+                mid = len(prices) // 2
+                median_list_price = (
+                    prices[mid] if len(prices) % 2 == 1
+                    else (prices[mid - 1] + prices[mid]) / 2
+                )
+            doms = [l.days_on_market for l in active_listings_q.all() if l.days_on_market]
+            if doms:
+                avg_days_on_market = round(sum(doms) / len(doms), 1)
+            listings_with_drops = active_listings_q.filter(Listing.price_drops_count > 0).count()
+            pct_with_drops = round(listings_with_drops / active_listings_count * 100, 1)
+
         by_city[city] = {
             "tracked_properties": int(city_props),
             "active_foreclosures": int(active),
             "reo_inventory": int(reo),
+            "active_listings": int(active_listings_count),
+            "median_list_price": median_list_price,
+            "avg_days_on_market": avg_days_on_market,
+            "listings_with_price_drops": int(listings_with_drops),
+            "pct_listings_with_drops": pct_with_drops,
         }
 
     return {

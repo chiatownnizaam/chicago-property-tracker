@@ -44,6 +44,14 @@ def _run_fred_ingest():
         log.exception(f"FRED ingest failed: {e}")
 
 
+def _run_chicago_distress_ingest():
+    from app.scrapers.chicago_distress import run_chicago_distress_ingest
+    try:
+        run_chicago_distress_ingest()
+    except Exception as e:
+        log.exception(f"Chicago distress ingest failed: {e}")
+
+
 def start_scheduler() -> BackgroundScheduler:
     global _scheduler
     if _scheduler is not None:
@@ -78,6 +86,15 @@ def start_scheduler() -> BackgroundScheduler:
         trigger=CronTrigger(day_of_week="mon", hour=3, minute=0),
         id="fred_weekly",
         name="FRED macro metrics weekly refresh",
+        replace_existing=True,
+    )
+
+    # Chicago Data Portal aggregates daily — permits and 311 reports update daily.
+    scheduler.add_job(
+        _run_chicago_distress_ingest,
+        trigger=CronTrigger(hour=2, minute=30),
+        id="chicago_distress_daily",
+        name="Chicago Data Portal aggregates (daily)",
         replace_existing=True,
     )
 
