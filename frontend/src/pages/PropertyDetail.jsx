@@ -23,6 +23,24 @@ const TYPE_ICONS = {
   listing: "🏷",
 };
 
+function FloodBadge({ zone, subtype }) {
+  // High-risk = A* or V* zones (Special Flood Hazard Area)
+  const isHighRisk = /^A/.test(zone) || /^V/.test(zone);
+  const isModerate = zone === "X" && subtype && subtype.toUpperCase().includes("0.2");
+  const cls = isHighRisk
+    ? "bg-red-100 text-red-800 border border-red-200"
+    : isModerate
+    ? "bg-yellow-100 text-yellow-800 border border-yellow-200"
+    : zone === "UNMAPPED"
+    ? "bg-gray-100 text-gray-600 border border-gray-200"
+    : "bg-green-100 text-green-800 border border-green-200";
+  return (
+    <span className={`px-2 py-0.5 rounded text-xs font-medium ${cls}`} title={subtype || zone}>
+      Zone {zone}{subtype ? ` — ${subtype}` : ""}
+    </span>
+  );
+}
+
 export default function PropertyDetail() {
   const { id } = useParams();
   const [data, setData] = useState(null);
@@ -76,6 +94,13 @@ export default function PropertyDetail() {
           <div><span className="text-gray-500">Sqft:</span> <strong>{prop.square_footage?.toLocaleString() || "—"}</strong></div>
           <div><span className="text-gray-500">Beds/Baths:</span> <strong>{prop.bedrooms || "—"} / {prop.bathrooms || "—"}</strong></div>
         </div>
+
+        {prop.flood_zone && (
+          <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-3">
+            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">FEMA Flood Zone:</span>
+            <FloodBadge zone={prop.flood_zone} subtype={prop.flood_zone_subtype} />
+          </div>
+        )}
       </div>
 
       {activeListing && (

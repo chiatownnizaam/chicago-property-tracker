@@ -60,6 +60,14 @@ def _run_ffiec_ingest():
         log.exception(f"FFIEC ingest failed: {e}")
 
 
+def _run_noaa_ingest():
+    from app.scrapers.noaa import run_noaa_ingest
+    try:
+        run_noaa_ingest()
+    except Exception as e:
+        log.exception(f"NOAA ingest failed: {e}")
+
+
 def start_scheduler() -> BackgroundScheduler:
     global _scheduler
     if _scheduler is not None:
@@ -114,6 +122,16 @@ def start_scheduler() -> BackgroundScheduler:
         id="ffiec_monthly",
         name="FFIEC Call Reports (monthly check)",
         replace_existing=True,
+    )
+
+    # NOAA weather — refresh every 3 hours.
+    scheduler.add_job(
+        _run_noaa_ingest,
+        trigger=IntervalTrigger(hours=3),
+        id="noaa_3h",
+        name="NOAA current weather + forecast",
+        replace_existing=True,
+        next_run_time=None,
     )
 
     scheduler.start()

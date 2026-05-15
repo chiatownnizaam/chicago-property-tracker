@@ -35,6 +35,11 @@ class Property(Base):
     latitude = Column(Numeric(10, 7))
     longitude = Column(Numeric(10, 7))
 
+    # FEMA National Flood Hazard Layer enrichment
+    flood_zone = Column(String(20))
+    flood_zone_subtype = Column(String(100))
+    flood_zone_updated_at = Column(DateTime)
+
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 

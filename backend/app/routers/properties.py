@@ -305,6 +305,8 @@ def get_property_history(property_id: int, db: Session = Depends(get_db)):
             "market_value": float(prop.market_value) if prop.market_value is not None else None,
             "assessed_value": float(prop.assessed_value) if prop.assessed_value is not None else None,
             "property_type": prop.property_type,
+            "flood_zone": prop.flood_zone,
+            "flood_zone_subtype": prop.flood_zone_subtype,
         },
         "timeline": timeline,
         "listings": listings_out,

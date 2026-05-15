@@ -17,6 +17,8 @@ from app.models.bank_financial import BankFinancial
 from app.scrapers.fred import SERIES, run_fred_ingest, FREDNotConfigured
 from app.scrapers.chicago_distress import run_chicago_distress_ingest
 from app.scrapers.ffiec import run_ffiec_ingest
+from app.scrapers.fema_flood import run_fema_enrichment
+from app.scrapers.noaa import run_noaa_ingest
 from app.services.market_metrics import compute_tracked_metrics
 
 log = logging.getLogger(__name__)
@@ -81,6 +83,30 @@ def get_market_metrics(db: Session = Depends(get_db)):
             "category": (r.series_metadata or {}).get("category", "distress"),
         })
 
+    # NOAA weather/climate series (latest per series)
+    noaa_rows = (
+        db.query(MarketMetric)
+        .filter(MarketMetric.source == "noaa")
+        .order_by(desc(MarketMetric.as_of_date))
+        .all()
+    )
+    seen_noaa = set()
+    noaa_latest = []
+    for r in noaa_rows:
+        if r.series_id in seen_noaa:
+            continue
+        seen_noaa.add(r.series_id)
+        noaa_latest.append({
+            "series_id": r.series_id,
+            "name": r.series_name,
+            "geography": r.geography,
+            "as_of": r.as_of_date.isoformat(),
+            "value": float(r.value),
+            "unit": r.unit,
+            "frequency": r.frequency,
+            "category": "climate",
+        })
+
     # FFIEC Call Report series — derived metrics aggregated from IL banks
     ffiec_rows = (
         db.query(MarketMetric)
@@ -121,6 +147,11 @@ def get_market_metrics(db: Session = Depends(get_db)):
             "source": "FFIEC Call Reports (via FDIC BankFind API)",
             "note": "Quarterly aggregates across all FDIC-insured Illinois banks.",
             "series": ffiec_latest,
+        },
+        "noaa": {
+            "source": "National Weather Service (NWS API)",
+            "note": "Current observations + 7-day forecast for Chicago (KORD).",
+            "series": noaa_latest,
         },
         "tracked": local,
     }
@@ -184,6 +215,20 @@ def refresh_chicago(background_tasks: BackgroundTasks):
 def refresh_ffiec(background_tasks: BackgroundTasks):
     """Refresh FFIEC Call Report aggregates + per-bank Cook County drill-down."""
     background_tasks.add_task(run_ffiec_ingest)
+    return {"status": "ingest_started"}
+
+
+@router.post("/refresh-fema")
+def refresh_fema(background_tasks: BackgroundTasks):
+    """Re-enrich all properties with FEMA flood zones."""
+    background_tasks.add_task(run_fema_enrichment)
+    return {"status": "ingest_started"}
+
+
+@router.post("/refresh-noaa")
+def refresh_noaa(background_tasks: BackgroundTasks):
+    """Refresh current weather + forecast from NWS."""
+    background_tasks.add_task(run_noaa_ingest)
     return {"status": "ingest_started"}
 
 
