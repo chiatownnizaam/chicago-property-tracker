@@ -36,6 +36,14 @@ def _run_listings_ingest():
         log.exception(f"Listings ingest failed: {e}")
 
 
+def _run_fred_ingest():
+    from app.scrapers.fred import run_fred_ingest
+    try:
+        run_fred_ingest()
+    except Exception as e:
+        log.exception(f"FRED ingest failed: {e}")
+
+
 def start_scheduler() -> BackgroundScheduler:
     global _scheduler
     if _scheduler is not None:
@@ -62,6 +70,15 @@ def start_scheduler() -> BackgroundScheduler:
         name="Redfin + Realtor listings (price-drop check) every 6h",
         replace_existing=True,
         next_run_time=None,  # don't run immediately on startup
+    )
+
+    # FRED data is quarterly/weekly — a single weekly run is plenty.
+    scheduler.add_job(
+        _run_fred_ingest,
+        trigger=CronTrigger(day_of_week="mon", hour=3, minute=0),
+        id="fred_weekly",
+        name="FRED macro metrics weekly refresh",
+        replace_existing=True,
     )
 
     scheduler.start()

@@ -6,6 +6,7 @@ import EvictionsPage from "./pages/EvictionsPage";
 import BankSeizuresPage from "./pages/BankSeizuresPage";
 import SalesPage from "./pages/SalesPage";
 import PriceDropsPage from "./pages/PriceDropsPage";
+import MarketMetricsPage from "./pages/MarketMetricsPage";
 import PropertyDetail from "./pages/PropertyDetail";
 import LoginPage from "./pages/LoginPage";
 import SetupTOTPPage from "./pages/SetupTOTPPage";
@@ -16,6 +17,7 @@ const NAV = [
   { to: "/", label: "Dashboard" },
   { to: "/map", label: "Map" },
   { to: "/price-drops", label: "Price Drops" },
+  { to: "/market-metrics", label: "Market Metrics" },
   { to: "/foreclosures", label: "Foreclosures" },
   { to: "/evictions", label: "Evictions" },
   { to: "/bank-seizures", label: "Bank Seizures" },
@@ -84,6 +86,7 @@ export default function App() {
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/map" element={<MapView />} />
                 <Route path="/price-drops" element={<PriceDropsPage />} />
+                <Route path="/market-metrics" element={<MarketMetricsPage />} />
                 <Route path="/foreclosures" element={<ForeclosuresPage />} />
                 <Route path="/evictions" element={<EvictionsPage />} />
                 <Route path="/bank-seizures" element={<BankSeizuresPage />} />

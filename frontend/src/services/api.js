@@ -32,3 +32,12 @@ export const getPriceDrops = (params = {}) =>
 
 export const getListing = (id) =>
   api.get(`/listings/${id}`).then((r) => r.data);
+
+export const getMarketMetrics = () =>
+  api.get("/market-metrics/").then((r) => r.data);
+
+export const getFredSeries = (id) =>
+  api.get(`/market-metrics/fred/${id}`).then((r) => r.data);
+
+export const refreshFred = () =>
+  api.post("/market-metrics/refresh-fred").then((r) => r.data);

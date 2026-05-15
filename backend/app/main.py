@@ -12,7 +12,7 @@ from slowapi.errors import RateLimitExceeded
 from app.config import settings
 from app.database import engine, Base
 from app.models import Property, Sale, Foreclosure, Eviction, BankSeizure, Listing, PriceHistory, User
-from app.routers import properties, foreclosures, evictions, bank_seizures, sales, listings, auth
+from app.routers import properties, foreclosures, evictions, bank_seizures, sales, listings, auth, market_metrics
 from app.auth.deps import get_current_user
 from app.scheduler import start_scheduler, stop_scheduler
 
@@ -56,6 +56,7 @@ app.include_router(evictions.router, prefix="/api/v1", dependencies=api_deps)
 app.include_router(bank_seizures.router, prefix="/api/v1", dependencies=api_deps)
 app.include_router(sales.router, prefix="/api/v1", dependencies=api_deps)
 app.include_router(listings.router, prefix="/api/v1", dependencies=api_deps)
+app.include_router(market_metrics.router, prefix="/api/v1", dependencies=api_deps)
 
 
 @app.get("/health")

@@ -5,6 +5,7 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql://postgres:password@localhost:5432/chicago_property_tracker"
     CHICAGO_DATA_PORTAL_APP_TOKEN: str = ""
+    FRED_API_KEY: str = ""
     CORS_ORIGINS: str = "http://localhost:3000"
     # Used to sign JWTs. Auto-generated per process if not set, but you
     # MUST set this in production .env or sessions become invalid on
