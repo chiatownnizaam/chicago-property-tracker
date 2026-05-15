@@ -298,6 +298,37 @@ export default function MarketMetricsPage() {
         </div>
       </section>
 
+      {/* REO Lifecycle */}
+      {t.reo_lifecycle && (
+        <section>
+          <h3 className="font-semibold text-gray-800 mb-1">REO Lifecycle (tracked sample)</h3>
+          <p className="text-xs text-gray-500 mb-3 italic">
+            Averages from our local foreclosure/seizure records. Sample sizes are small —
+            for accurate industry-level numbers, MBA or Black Knight reports are the gold standard.
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Stat
+              title="Time to REO (avg)"
+              value={t.reo_lifecycle.time_to_reo_days_avg != null ? `${t.reo_lifecycle.time_to_reo_days_avg} days` : "—"}
+              sub={`filing date → REO  ·  n=${t.reo_lifecycle.sample_size_time_to_reo}`}
+              color="red"
+            />
+            <Stat
+              title="Avg holding period (closed)"
+              value={t.reo_lifecycle.avg_holding_period_days_closed != null ? `${t.reo_lifecycle.avg_holding_period_days_closed} days` : "—"}
+              sub={`REO → disposition  ·  n=${t.reo_lifecycle.sample_size_closed_reo}`}
+              color="purple"
+            />
+            <Stat
+              title="Age of active REO (avg)"
+              value={t.reo_lifecycle.avg_age_active_reo_days != null ? `${t.reo_lifecycle.avg_age_active_reo_days} days` : "—"}
+              sub={`days held so far  ·  n=${t.reo_lifecycle.sample_size_active_reo}`}
+              color="orange"
+            />
+          </div>
+        </section>
+      )}
+
       {/* Per-city breakdown */}
       <section>
         <h3 className="font-semibold text-gray-800 mb-3">By city — counts + listing metrics</h3>

@@ -56,6 +56,26 @@ SERIES: Dict[str, Dict[str, str]] = {
         "unit": "percent", "frequency": "quarterly",
         "category": "credit", "geography": "national",
     },
+    "NPTLTL": {
+        "name": "Nonperforming Loans (90+ DPD + nonaccrual) to Total Loans",
+        "unit": "percent", "frequency": "quarterly",
+        "category": "credit", "geography": "national",
+    },
+    "DRSREACBS": {
+        "name": "Delinquency Rate, All Loans Secured by Real Estate",
+        "unit": "percent", "frequency": "quarterly",
+        "category": "credit", "geography": "national",
+    },
+    "DRCRELEXFACBS": {
+        "name": "Delinquency Rate, Commercial Real Estate Loans (ex. Farmland)",
+        "unit": "percent", "frequency": "quarterly",
+        "category": "credit", "geography": "national",
+    },
+    "TLAACBM027SBOG": {
+        "name": "Total Assets, All Commercial Banks",
+        "unit": "usd_billions", "frequency": "monthly",
+        "category": "credit", "geography": "national",
+    },
 
     # ---- Home prices ---------------------------------------------------------
     "CSUSHPISA": {

@@ -121,6 +121,46 @@ def compute_tracked_metrics(db: Session) -> Dict[str, object]:
         .scalar() or 0
     )
 
+    # ---- REO lifecycle metrics (tracked sample) -----------------------------
+    # Time-to-REO: avg days from foreclosure filing to REO seizure for the same
+    # property. Only counts pairs where both records exist in our data.
+    time_to_reo_pairs = (
+        db.query(Foreclosure.filing_date, BankSeizure.seizure_date)
+        .join(Property, Foreclosure.property_id == Property.id)
+        .join(BankSeizure, BankSeizure.property_id == Property.id)
+        .filter(tracked_property_filter)
+        .filter(BankSeizure.seizure_type == SeizureType.reo)
+        .filter(Foreclosure.filing_date.isnot(None))
+        .filter(BankSeizure.seizure_date.isnot(None))
+        .all()
+    )
+    time_to_reo_days_avg = None
+    if time_to_reo_pairs:
+        deltas = [(s - f).days for f, s in time_to_reo_pairs if s and f and s >= f]
+        if deltas:
+            time_to_reo_days_avg = round(sum(deltas) / len(deltas), 1)
+
+    # Avg REO holding period: for closed REOs, release_date - seizure_date;
+    # for currently-active REOs, today - seizure_date.
+    reo_records = (
+        db.query(BankSeizure.seizure_date, BankSeizure.release_date, BankSeizure.is_active)
+        .join(Property, BankSeizure.property_id == Property.id)
+        .filter(tracked_property_filter)
+        .filter(BankSeizure.seizure_type == SeizureType.reo)
+        .filter(BankSeizure.seizure_date.isnot(None))
+        .all()
+    )
+    closed_days = []
+    active_days = []
+    for sd, rd, active in reo_records:
+        if active:
+            active_days.append((today - sd).days)
+        elif rd:
+            closed_days.append((rd - sd).days)
+
+    avg_holding_period_closed = round(sum(closed_days) / len(closed_days), 1) if closed_days else None
+    avg_age_active_reo = round(sum(active_days) / len(active_days), 1) if active_days else None
+
     # Tax delinquency = leading indicator we DO have
     tax_distress_active = (
         db.query(func.count(BankSeizure.id))
@@ -226,6 +266,14 @@ def compute_tracked_metrics(db: Session) -> Dict[str, object]:
             "reo_inventory": int(reo_inventory),
             "reo_disposed_90d": int(reo_disposed_90d),
             "active_tax_distress": int(tax_distress_active),
+        },
+        "reo_lifecycle": {
+            "time_to_reo_days_avg": time_to_reo_days_avg,
+            "avg_holding_period_days_closed": avg_holding_period_closed,
+            "avg_age_active_reo_days": avg_age_active_reo,
+            "sample_size_time_to_reo": len(time_to_reo_pairs) if time_to_reo_pairs else 0,
+            "sample_size_closed_reo": len(closed_days),
+            "sample_size_active_reo": len(active_days),
         },
         "rates": {
             "foreclosure_rate_per_1000_tracked": float(foreclosure_rate_per_1000),
