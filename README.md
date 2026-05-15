@@ -47,6 +47,32 @@ npm run dev
 - Dashboard:  http://localhost:3000
 - API docs:   http://localhost:8000/docs
 
+### Internet-accessible deployment
+
+The app supports a single-URL production deployment with TOTP-protected
+auth and a Cloudflare quick tunnel — no port forwarding required.
+
+```bash
+# 1. Build the React bundle (FastAPI then serves it at /)
+cd frontend && npm run build
+
+# 2. Create your admin account (password 12+ chars)
+cd ../backend && ./venv/bin/python -m app.scripts.create_admin <username> '<password>'
+
+# 3. Install cloudflared and launchd services
+brew install cloudflared
+./deploy/launchd/install.sh
+
+# 4. Find the public URL
+grep -oE 'https://[a-z-]+\.trycloudflare\.com' \
+  ~/Library/Logs/chicago-property-tracker/tunnel.err.log | tail -1
+```
+
+First login at the public URL prompts you to scan a QR code with MS
+Authenticator (or any TOTP app). Subsequent logins require the 6-digit code.
+
+See [deploy/launchd/README.md](deploy/launchd/README.md) for service management.
+
 ## Live data ingest
 
 ```bash
