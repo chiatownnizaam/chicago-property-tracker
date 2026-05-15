@@ -157,9 +157,15 @@ def _list_cook_county_certs() -> List[dict]:
 
 
 def _fetch_bank_quarter(fdic_id: str, repdte: str) -> Optional[dict]:
-    """Fetch one bank's financials for one quarter. Returns dict or None."""
+    """Fetch one bank's financials for one quarter. Returns dict or None.
+
+    Note: FDIC institutions ID == FDIC certificate number, which in the
+    financials endpoint is filterable via the CERT field. The financials
+    ID field is composite ({CERT}_{REPDTE}) and doesn't match a bare
+    integer filter.
+    """
     params = {
-        "filters": f"ID:{fdic_id} AND REPDTE:{repdte}",
+        "filters": f"CERT:{fdic_id} AND REPDTE:{repdte}",
         "fields": "ASSET,ORE,NAME,CITY,STNAME",
         "limit": 1,
     }
