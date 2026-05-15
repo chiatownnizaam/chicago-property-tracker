@@ -20,6 +20,8 @@ from app.models.foreclosure import Foreclosure, ForeclosureStatus
 from app.models.bank_seizure import BankSeizure, SeizureType
 from app.scrapers.chicago_data_portal import fetch_sales_for_cities, fetch_tax_sales_for_cities
 from app.scrapers.cook_county_foreclosures import fetch_foreclosure_filings, normalize_foreclosure
+from app.scrapers.fema_flood import enrich_flood_zone
+from app.scrapers.cook_county_assessor import enrich_property as enrich_from_assessor
 from app.utils.normalize import normalize_address, normalize_city, normalize_pin, to_decimal
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -69,6 +71,16 @@ def _get_or_create_property(
     )
     db.add(prop)
     db.flush()
+
+    # Inline enrichments for new properties — best-effort, never block ingest
+    try:
+        enrich_from_assessor(prop)
+    except Exception as e:
+        log.debug(f"Assessor enrichment skipped: {e}")
+    try:
+        enrich_flood_zone(prop)
+    except Exception as e:
+        log.debug(f"FEMA enrichment skipped: {e}")
     return prop
 
 

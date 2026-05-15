@@ -19,6 +19,7 @@ from app.scrapers.chicago_distress import run_chicago_distress_ingest
 from app.scrapers.ffiec import run_ffiec_ingest
 from app.scrapers.fema_flood import run_fema_enrichment
 from app.scrapers.noaa import run_noaa_ingest
+from app.scrapers.cook_county_assessor import run_assessor_enrichment
 from app.services.market_metrics import compute_tracked_metrics
 
 log = logging.getLogger(__name__)
@@ -229,6 +230,13 @@ def refresh_fema(background_tasks: BackgroundTasks):
 def refresh_noaa(background_tasks: BackgroundTasks):
     """Refresh current weather + forecast from NWS."""
     background_tasks.add_task(run_noaa_ingest)
+    return {"status": "ingest_started"}
+
+
+@router.post("/refresh-assessor")
+def refresh_assessor(background_tasks: BackgroundTasks):
+    """Re-enrich all properties from the Cook County Assessor."""
+    background_tasks.add_task(run_assessor_enrichment)
     return {"status": "ingest_started"}
 
 

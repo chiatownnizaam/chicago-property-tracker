@@ -51,6 +51,29 @@ def fetch_flood_zone(latitude: float, longitude: float) -> Tuple[Optional[str], 
     return attrs.get("FLD_ZONE"), attrs.get("ZONE_SUBTY")
 
 
+def enrich_flood_zone(prop) -> bool:
+    """
+    Enrich a single Property in-place. Returns True if updated, False if
+    skipped (already enriched, no lat/lon, or FEMA unreachable).
+
+    Caller is responsible for committing the session. Failures are silent so
+    a flaky FEMA call never blocks an ingest.
+    """
+    if prop.flood_zone:
+        return False
+    if prop.latitude is None or prop.longitude is None:
+        return False
+    try:
+        zone, subtype = fetch_flood_zone(float(prop.latitude), float(prop.longitude))
+    except Exception as e:
+        log.debug(f"FEMA enrichment skipped for {prop.address}: {e}")
+        return False
+    prop.flood_zone = zone or "UNMAPPED"
+    prop.flood_zone_subtype = subtype
+    prop.flood_zone_updated_at = datetime.utcnow()
+    return True
+
+
 def enrich_properties(db: Session, force: bool = False) -> int:
     """Enrich every property with lat/lon. Set force=True to overwrite."""
     query = db.query(Property).filter(

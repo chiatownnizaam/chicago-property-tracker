@@ -95,11 +95,44 @@ export default function PropertyDetail() {
           <div><span className="text-gray-500">Beds/Baths:</span> <strong>{prop.bedrooms || "—"} / {prop.bathrooms || "—"}</strong></div>
         </div>
 
-        {prop.flood_zone && (
-          <div className="mt-4 pt-4 border-t border-gray-100 flex items-center gap-3">
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">FEMA Flood Zone:</span>
-            <FloodBadge zone={prop.flood_zone} subtype={prop.flood_zone_subtype} />
+        {(prop.flood_zone || prop.walk_score != null || prop.school_district) && (
+          <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+            {prop.flood_zone && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Flood:</span>
+                <FloodBadge zone={prop.flood_zone} subtype={prop.flood_zone_subtype} />
+              </div>
+            )}
+            {prop.walk_score != null && (
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Walk Score:</span>
+                <span className="font-semibold text-gray-800">{Number(prop.walk_score).toFixed(1)}</span>
+                <span className="text-xs text-gray-400">/ 100</span>
+              </div>
+            )}
+            {prop.school_district && (
+              <div className="flex items-center gap-2 text-gray-700">
+                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">School:</span>
+                <span className="truncate text-xs">{prop.school_district}</span>
+              </div>
+            )}
           </div>
+        )}
+
+        {prop.parcel_data && Object.keys(prop.parcel_data).length > 0 && (
+          <details className="mt-3 text-xs">
+            <summary className="cursor-pointer text-blue-600 hover:underline">More from Cook County Assessor</summary>
+            <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-1 text-gray-600">
+              {Object.entries(prop.parcel_data).map(([k, v]) =>
+                v != null && v !== "" ? (
+                  <div key={k} className="flex gap-2">
+                    <span className="font-semibold capitalize">{k.replace(/_/g, " ")}:</span>
+                    <span>{String(v)}</span>
+                  </div>
+                ) : null
+              )}
+            </div>
+          </details>
         )}
       </div>
 

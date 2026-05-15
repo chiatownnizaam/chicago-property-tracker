@@ -16,6 +16,8 @@ from app.models.property import Property
 from app.models.listing import Listing, PriceHistory, ListingSource, ListingStatus
 from app.scrapers.redfin import fetch_all_listings as fetch_redfin
 from app.scrapers.realtor import fetch_all_listings as fetch_realtor
+from app.scrapers.fema_flood import enrich_flood_zone
+from app.scrapers.cook_county_assessor import enrich_property as enrich_from_assessor
 from app.utils.normalize import normalize_address, normalize_city, to_decimal, to_coord
 
 log = logging.getLogger(__name__)
@@ -71,6 +73,16 @@ def _get_or_create_property(
     )
     db.add(prop)
     db.flush()
+
+    # Best-effort enrichments — never block listing ingest on failures
+    try:
+        enrich_from_assessor(prop)
+    except Exception as e:
+        log.debug(f"Assessor enrichment skipped: {e}")
+    try:
+        enrich_flood_zone(prop)
+    except Exception as e:
+        log.debug(f"FEMA enrichment skipped: {e}")
     return prop
 
 

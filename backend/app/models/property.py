@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, DateTime, Index
+from sqlalchemy import Column, Integer, String, Numeric, DateTime, Index, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from app.database import Base
@@ -39,6 +39,12 @@ class Property(Base):
     flood_zone = Column(String(20))
     flood_zone_subtype = Column(String(100))
     flood_zone_updated_at = Column(DateTime)
+
+    # Cook County Assessor parcel enrichment
+    walk_score = Column(Numeric(5, 2))
+    school_district = Column(String(100))
+    parcel_data = Column(JSON)
+    parcel_enriched_at = Column(DateTime)
 
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
