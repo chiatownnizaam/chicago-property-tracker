@@ -1,7 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func, select, case, exists
+from sqlalchemy import func, select, case, exists, and_, literal_column
 from typing import Optional
+from datetime import date, timedelta
+import math
 from app.database import get_db
 from app.models.property import Property
 from app.models.foreclosure import Foreclosure
@@ -176,6 +178,121 @@ def get_property(property_id: int, db: Session = Depends(get_db)):
     if not prop:
         raise HTTPException(status_code=404, detail="Property not found")
     return prop
+
+
+@router.get("/{property_id}/comps")
+def get_comparable_sales(
+    property_id: int,
+    radius_miles: float = Query(1.0, ge=0.1, le=10.0),
+    months: int = Query(12, ge=1, le=60),
+    limit: int = Query(50, le=200),
+    db: Session = Depends(get_db),
+):
+    """
+    Comparable sales: any sale of a property within `radius_miles` of the
+    subject property within the last `months`. Distance computed with
+    Haversine in SQL.
+    """
+    subj = db.query(Property).filter(Property.id == property_id).first()
+    if not subj:
+        raise HTTPException(404, "Property not found")
+    if subj.latitude is None or subj.longitude is None:
+        raise HTTPException(400, "Subject property has no coordinates")
+
+    lat0 = float(subj.latitude)
+    lon0 = float(subj.longitude)
+    cutoff_date = date.today() - timedelta(days=months * 30)
+
+    # Haversine in SQL — distance in miles using the 3959 mi Earth radius.
+    # Acos clamp guards against tiny float drift > 1.
+    dist_sql = (
+        3959.0
+        * func.acos(
+            func.least(1.0,
+                func.cos(func.radians(lat0)) * func.cos(func.radians(Property.latitude))
+                * func.cos(func.radians(Property.longitude) - func.radians(lon0))
+                + func.sin(func.radians(lat0)) * func.sin(func.radians(Property.latitude))
+            )
+        )
+    ).label("distance_miles")
+
+    stmt = (
+        select(
+            Property.id,
+            Property.address,
+            Property.city,
+            Property.bedrooms,
+            Property.bathrooms,
+            Property.square_footage,
+            Property.year_built,
+            dist_sql,
+            Sale.id.label("sale_id"),
+            Sale.sale_date,
+            Sale.sale_price,
+            Sale.price_per_sqft,
+        )
+        .join(Sale, Sale.property_id == Property.id)
+        .where(Property.id != property_id)
+        .where(Property.latitude.isnot(None))
+        .where(Property.longitude.isnot(None))
+        .where(Sale.sale_date >= cutoff_date)
+        .order_by(Sale.sale_date.desc())
+    )
+
+    raw = db.execute(stmt).all()
+    # Filter by radius in Python (the SQL clause can't easily filter on an alias)
+    rows = [r for r in raw if r.distance_miles is not None and r.distance_miles <= radius_miles]
+    rows = rows[:limit]
+
+    if not rows:
+        return {
+            "subject": {"id": subj.id, "address": subj.address, "city": subj.city},
+            "radius_miles": radius_miles, "months": months,
+            "count": 0, "median_price": None, "mean_price": None,
+            "median_price_per_sqft": None, "comps": [],
+        }
+
+    prices = sorted([float(r.sale_price) for r in rows if r.sale_price])
+    ppsf = sorted([float(r.price_per_sqft) for r in rows if r.price_per_sqft])
+
+    def median(xs):
+        if not xs:
+            return None
+        n = len(xs)
+        return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2
+
+    return {
+        "subject": {
+            "id": subj.id,
+            "address": subj.address,
+            "city": subj.city,
+            "square_footage": float(subj.square_footage) if subj.square_footage else None,
+        },
+        "radius_miles": radius_miles,
+        "months": months,
+        "count": len(rows),
+        "median_price": round(median(prices), 0) if prices else None,
+        "mean_price": round(sum(prices) / len(prices), 0) if prices else None,
+        "min_price": prices[0] if prices else None,
+        "max_price": prices[-1] if prices else None,
+        "median_price_per_sqft": round(median(ppsf), 2) if ppsf else None,
+        "comps": [
+            {
+                "property_id": r.id,
+                "address": r.address,
+                "city": r.city,
+                "bedrooms": r.bedrooms,
+                "bathrooms": float(r.bathrooms) if r.bathrooms else None,
+                "square_footage": float(r.square_footage) if r.square_footage else None,
+                "year_built": r.year_built,
+                "distance_miles": round(float(r.distance_miles), 2),
+                "sale_date": r.sale_date.isoformat() if r.sale_date else None,
+                "sale_price": float(r.sale_price) if r.sale_price else None,
+                "price_per_sqft": float(r.price_per_sqft) if r.price_per_sqft else None,
+            }
+            for r in rows
+        ],
+    }
 
 
 @router.get("/{property_id}/history")

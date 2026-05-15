@@ -50,3 +50,6 @@ export const getBankHistory = (fdic_id) =>
 
 export const getSeriesHistory = (source, series_id) =>
   api.get(`/market-metrics/series/${source}/${series_id}`).then((r) => r.data);
+
+export const getComps = (id, params = {}) =>
+  api.get(`/properties/${id}/comps`, { params }).then((r) => r.data);
